@@ -146,9 +146,25 @@ const mergeAbbreviations = (sentences, text, breaks) => {
     return sentences
 }
 
-// Short fragments ("Да.") are not useful translation units; merge forward until
-// stable, but never across a hard break.
-const mergeShort = (sentences, breaks) => {
+// Closing quotes and brackets that may trail the punctuation of a sentence
+// ("Он ушёл».", "Done!)"). They never end a sentence on their own.
+const CLOSERS = /[»"'\u2018\u2019\u201A\u201C\u201D\u201E\u2039\u203A)\]]$/
+const TERMINAL = /[.!?…]$/
+
+// Whether the segment already ends a sentence, ignoring trailing closers. A
+// complete short sentence ("Да.") is a valid translation unit on its own, so it
+// must not be glued to the next one; only a fragment that stops without
+// terminal punctuation is merged forward.
+const endsSentence = sentence => {
+    let end = sentence.length
+    while (end > 0 && CLOSERS.test(sentence.slice(0, end))) end--
+    if (end === 0) return true
+    return TERMINAL.test(sentence.slice(0, end))
+}
+
+// Short fragments are not useful translation units; merge forward until stable,
+// but never across a hard break and never past a finished sentence.
+const mergeShort = (sentences, text, breaks) => {
     let merged = true
     while (merged) {
         merged = false
@@ -156,6 +172,7 @@ const mergeShort = (sentences, breaks) => {
             const current = sentences[i]
             const next = sentences[i + 1]
             if (current[1] - current[0] >= SEG_MIN_CHARS) continue
+            if (endsSentence(text.slice(current[0], current[1]))) continue
             if (hasBreak(breaks, current[1], next[0])) continue
             current[1] = next[1]
             sentences.splice(i + 1, 1)
@@ -175,7 +192,7 @@ const segment = (text, breaks, locale) => {
         if (end > start) trimmed.push([start, end])
     }
     mergeAbbreviations(trimmed, text, breaks)
-    mergeShort(trimmed, breaks)
+    mergeShort(trimmed, text, breaks)
     return trimmed
 }
 
